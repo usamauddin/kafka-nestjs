@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Kafka } from 'kafkajs';
+import { partition } from 'rxjs';
 
 @Injectable()
 export class KafkaService {
@@ -9,6 +10,11 @@ export class KafkaService {
     this.kafka = new Kafka({
       clientId: 'kafka',
       brokers: ['localhost:9092'],
+      // retry: {
+      //   // retries: 50, // Maximum number of retries
+      //   // initialRetryTime: 100, // Initial retry time in milliseconds
+      //   // maxRetryTime: 30000, // Maximum retry time in milliseconds
+      // },
     });
   }
 
@@ -17,12 +23,14 @@ export class KafkaService {
       const producer = this.kafka.producer();
 
       await producer.connect();
+
       await producer.send({
         topic: 'test-topic',
-        messages: [{ value: 'Hello Kafka user!' }],
+        messages: [{ value: message }],
       });
 
       await producer.disconnect();
+
       return 'Message sent successfully';
     } catch (error) {
       console.log(error);
@@ -37,14 +45,27 @@ export class KafkaService {
       await consumer.connect();
       await consumer.subscribe({ topic: 'test-topic', fromBeginning: true });
 
-      await consumer.run({
-        eachMessage: async ({ topic, partition, message }) => {
+      const data = consumer.run({
+        eachMessage: async ({ topic, message, partition }) => {
           console.log({
             message: message.value.toString(),
+            partition,
+            offset: message.offset,
           });
+          return message;
         },
       });
+      consumer.seek({
+        topic: 'test-topic',
+        partition: 0,
+        offset: '0',
+      });
+
+      console.log('data', data);
+
+      return data;
     } catch (error) {
+      console.log(error);
       throw error;
     }
   }
